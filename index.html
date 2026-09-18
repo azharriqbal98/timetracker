@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* ======================================================================
+   ONLY LINE YOU NEED TO EDIT:
+   Paste your Apps Script Web app URL (it ends in /exec) between the quotes.
+   ====================================================================== */
+var API_URL = 'https://script.google.com/macros/s/AKfycbz73ezEyp2kIMbaQi2Vorb9lt1tRnXW04RYpJBZfOaFoGgsKg96vFGVghXXicC4OLMA/exec;
+</script>
+<meta charset="utf-8">
+<title>Time Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E9EEF2;
+    --surface: #FFFFFF;
+    --ink: #14202B;
+    --muted: #5C6B78;
+    --line: #D3DBE2;
+    --in: #0E7C66;      --in-soft: #DDF1EC;
+    --break: #B26B00;   --break-soft: #FBEBCF;
+    --done: #3B5BA9;    --done-soft: #E1E8F8;
+    --out: #74808B;     --out-soft: #E6EAEE;
+    --danger: #B3382C;
+    --font: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.45;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--done); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    background: var(--ink);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .topbar-team { font-weight: 700; font-size: 17px; font-stretch: 110%; }
+  .topbar-clock { font-variant-numeric: tabular-nums; color: #B9C6D1; font-size: 15px; white-space: nowrap; }
+  .loadbar { height: 3px; background: transparent; overflow: hidden; }
+  .loadbar.on { background: linear-gradient(90deg, var(--in) 0 40%, transparent 40%); background-size: 250% 100%; animation: slide 1s linear infinite; }
+  @keyframes slide { from { background-position: 100% 0; } to { background-position: -66% 0; } }
+  @media (prefers-reduced-motion: reduce) { .loadbar.on { animation: none; background: var(--in); } }
+
+  main { flex: 1; width: 100%; padding: 28px 16px 40px; }
+  .narrow { max-width: 520px; margin: 0 auto; }
+  .wide { max-width: 1120px; margin: 0 auto; }
+
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; font-weight: 800; font-stretch: 105%; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; margin: 0; font-weight: 700; }
+  .lede { color: var(--muted); margin: 0 0 22px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px;
+  }
+
+  label { display: block; font-weight: 600; font-size: 14px; margin: 0 0 6px; }
+  .field { margin-bottom: 16px; }
+  input[type=text], input[type=password], input[type=date], select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 16px;
+  }
+  input:focus, select:focus { border-color: var(--ink); outline: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 12px 18px;
+    border-radius: 8px;
+    border: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn-block { width: 100%; }
+  .btn-big { padding: 18px; font-size: 19px; border-radius: 10px; }
+  .btn-in { background: var(--in); border-color: var(--in); }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-out { background: #fff; color: var(--danger); border-color: var(--danger); }
+  .btn-out.confirm { background: var(--danger); color: #fff; }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--done); text-decoration: underline; cursor: pointer; font-weight: 600; }
+
+  /* ---------- employee punch panel ---------- */
+  .who { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .who-name { font-size: 22px; font-weight: 800; font-stretch: 105%; }
+
+  .punch { border-top: 6px solid var(--out); text-align: center; padding-top: 26px; }
+  .punch[data-state="Working"]   { border-top-color: var(--in); }
+  .punch[data-state="On Break"]  { border-top-color: var(--break); }
+  .punch[data-state="Completed"] { border-top-color: var(--done); }
+
+  .timer {
+    font-size: clamp(46px, 15vw, 76px);
+    font-weight: 800;
+    font-stretch: 118%;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin: 12px 0 10px;
+  }
+  .punch[data-state="Clocked Out"] .timer { color: var(--out); }
+  .punch-sub { color: var(--muted); margin: 0 0 22px; min-height: 1.45em; }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 14px;
+    background: var(--out-soft); color: var(--out);
+  }
+  .badge[data-state="Working"]   { background: var(--in-soft); color: var(--in); }
+  .badge[data-state="On Break"]  { background: var(--break-soft); color: var(--break); }
+  .badge[data-state="Completed"] { background: var(--done-soft); color: var(--done); }
+
+  .punch-form { text-align: left; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .seg button {
+    padding: 12px 6px;
+    border-radius: 8px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"][data-status="Working"]   { background: var(--in); border-color: var(--in); color: #fff; }
+  .seg button[aria-pressed="true"][data-status="On Break"]  { background: var(--break); border-color: var(--break); color: #fff; }
+  .seg button[aria-pressed="true"][data-status="Completed"] { background: var(--done); border-color: var(--done); color: #fff; }
+  .task-row { display: flex; gap: 8px; }
+  .task-row input { flex: 1; min-width: 0; }
+  .divider { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+
+  /* ---------- admin ---------- */
+  .admin-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
+  .admin-head .lede { margin: 0; }
+  .admin-actions { display: flex; gap: 8px; align-items: center; }
+
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 30px; }
+  .col { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; border-top: 6px solid var(--out); padding: 16px; min-height: 140px; }
+  .col[data-group="in"] { border-top-color: var(--in); }
+  .col[data-group="break"] { border-top-color: var(--break); }
+  .col-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .col-count { font-size: 30px; font-weight: 800; font-stretch: 118%; font-variant-numeric: tabular-nums; line-height: 1; }
+  .col-empty { color: var(--muted); font-size: 14px; margin: 0; }
+
+  .tag { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; background: #FAFBFC; }
+  .tag-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .tag-name { font-weight: 700; }
+  .tag-hours { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .tag-task { margin: 4px 0 0; font-size: 15px; overflow-wrap: anywhere; }
+  .tag-task.none { color: var(--muted); font-style: italic; }
+  .tag-meta { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .tag .badge { font-size: 12px; padding: 2px 8px; margin-left: 6px; }
+
+  .log-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .log-controls { display: flex; gap: 8px; align-items: center; }
+  .log-controls input[type=date] { width: auto; padding: 9px 12px; }
+  .log-controls .btn { padding: 9px 14px; }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 980px; font-size: 15px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; font-weight: 700; color: var(--muted); background: #F5F7F9; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.updates { white-space: pre-line; font-size: 13px; color: var(--muted); min-width: 260px; overflow-wrap: anywhere; }
+  td.nowrap { white-space: nowrap; }
+  td.task { min-width: 190px; overflow-wrap: anywhere; }
+  .empty-row { color: var(--muted); text-align: center; padding: 28px; }
+  tfoot td { font-weight: 700; background: #F5F7F9; }
+
+  .track { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 14px;
+    background: var(--in-soft); color: #0A5A4A; border: 1px solid #B5DED4; }
+  .track[data-on="false"] { background: #FBE3E0; color: #7E241B; border-color: #EDB9B3; }
+  .track[data-on="paused"] { background: var(--break-soft); color: #7A4A00; border-color: #EBCB8E; }
+  .track .btn { padding: 8px 12px; font-size: 14px; }
+  .fineprint { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+  .auto-note { text-align: left; margin-bottom: 16px; }
+
+  .shots-head { margin-top: 34px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .shot { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; color: inherit; text-decoration: none; }
+  .shot img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #DCE3E9; }
+  .shot-cap { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .shot-flag { color: var(--danger); font-weight: 700; font-size: 13px; }
+  .log-controls select { width: auto; padding: 9px 12px; }
+
+  .notice { background: var(--break-soft); border: 1px solid #EBCB8E; border-radius: 8px; padding: 12px 14px; font-size: 15px; }
+
+  footer { text-align: center; padding: 18px; font-size: 14px; color: var(--muted); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--ink); color: #fff;
+    padding: 12px 18px; border-radius: 8px;
+    font-weight: 600; width: max-content; max-width: calc(100vw - 32px);
+    box-shadow: 0 6px 24px rgba(20, 32, 43, .28);
+    z-index: 10;
+  }
+  .toast.error { background: var(--danger); }
+
+  @media (max-width: 760px) {
+    .board { grid-template-columns: 1fr; }
+    .col { min-height: 0; }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-team" id="teamName">Time Tracker</span>
+  <span class="topbar-clock" id="nowClock"></span>
+</header>
+<div class="loadbar" id="loadbar"></div>
+
+<main>
+
+  <!-- ============ 0. Shown only if API_URL was not filled in ============ -->
+  <section id="view-setup" class="narrow" hidden>
+    <h1>One more step</h1>
+    <div class="panel notice">
+      This page is not connected to your Google Sheet yet. Open this file, find the line
+      <strong>var API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';</strong> near the top, and paste your
+      Apps Script Web app URL (ending in /exec) between the quotes.
+    </div>
+  </section>
+
+  <!-- ============ 1. Choose your name ============ -->
+  <section id="view-pick" class="narrow" hidden>
+    <h1>Who is clocking in?</h1>
+    <p class="lede">Pick your name to see your time clock.</p>
+    <div class="panel">
+      <div id="noEmployees" class="notice" hidden>
+        No employees have been added yet. Open the Google Sheet, go to the "Employees" tab and type names in column A.
+      </div>
+      <div id="pickForm">
+        <div class="field">
+          <label for="empSelect">Your name</label>
+          <select id="empSelect"></select>
+        </div>
+        <div class="field" id="pinField" hidden>
+          <label for="pinInput">Your PIN</label>
+          <input type="password" id="pinInput" inputmode="numeric" autocomplete="off">
+        </div>
+        <button class="btn btn-block" id="continueBtn">Open my time clock</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. Employee time clock ============ -->
+  <section id="view-employee" class="narrow" hidden>
+    <div class="who">
+      <span class="who-name" id="whoName"></span>
+      <button class="linkbtn" id="switchBtn">Switch name</button>
+    </div>
+
+    <div class="panel punch" id="punch" data-state="Clocked Out">
+      <span class="badge" id="statusBadge" data-state="Clocked Out">Clocked out</span>
+      <div class="timer" id="timer" aria-live="off">00:00:00</div>
+      <p class="punch-sub" id="punchSub"></p>
+
+      <div class="punch-form">
+        <div class="notice auto-note" id="autoNote" hidden></div>
+        <!-- shown when clocked out -->
+        <div id="outForm">
+          <div class="field">
+            <label for="startTask">What are you starting on?</label>
+            <input type="text" id="startTask" maxlength="200" placeholder="e.g. Client proposal for Acme">
+          </div>
+          <button class="btn btn-in btn-big btn-block" id="clockInBtn">Clock in</button>
+          <p class="fineprint" id="screenInfo" hidden></p>
+        </div>
+
+        <!-- shown when clocked in -->
+        <div id="inForm" hidden>
+          <div class="track" id="trackStrip" data-on="true" hidden>
+            <span id="trackText"></span>
+            <button class="btn" id="resumeBtn" hidden>Share screen again</button>
+          </div>
+          <div class="field">
+            <label id="statusLabel">Status</label>
+            <div class="seg" id="statusSeg" role="group" aria-labelledby="statusLabel"></div>
+          </div>
+          <div class="field">
+            <label for="taskInput">Current task</label>
+            <div class="task-row">
+              <input type="text" id="taskInput" maxlength="200" placeholder="What are you working on?">
+              <button class="btn" id="saveTaskBtn">Save task</button>
+            </div>
+          </div>
+          <hr class="divider">
+          <button class="btn btn-out btn-big btn-block" id="clockOutBtn">Clock out</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. Admin sign-in ============ -->
+  <section id="view-adminLogin" class="narrow" hidden>
+    <h1>Admin dashboard</h1>
+    <p class="lede">Enter the admin password to see the team.</p>
+    <div class="panel">
+      <div class="field">
+        <label for="adminPw">Admin password</label>
+        <input type="password" id="adminPw" autocomplete="off">
+      </div>
+      <button class="btn btn-block" id="adminLoginBtn">Open dashboard</button>
+    </div>
+  </section>
+
+  <!-- ============ 4. Admin dashboard ============ -->
+  <section id="view-admin" class="wide" hidden>
+    <div class="admin-head">
+      <div>
+        <h1>Team right now</h1>
+        <p class="lede" id="refreshNote">Loading&hellip;</p>
+      </div>
+      <div class="admin-actions">
+        <button class="btn btn-ghost" id="refreshBtn">Refresh</button>
+        <button class="btn btn-ghost" id="adminLogoutBtn">Sign out</button>
+      </div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="log-head">
+      <h2>Daily log</h2>
+      <div class="log-controls">
+        <label for="logDate" style="margin:0">Date</label>
+        <input type="date" id="logDate">
+        <button class="btn btn-ghost" id="todayBtn">Today</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Clock in</th>
+            <th>Clock out</th>
+            <th class="num">Total</th>
+            <th class="num">Breaks</th>
+            <th class="num">Worked</th>
+            <th>Status</th>
+            <th>Last task</th>
+            <th>Task updates</th>
+          </tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+        <tfoot id="logFoot"></tfoot>
+      </table>
+    </div>
+
+    <div class="log-head shots-head">
+      <h2>Screenshots</h2>
+      <div class="log-controls">
+        <label for="shotEmp" style="margin:0">Employee</label>
+        <select id="shotEmp"></select>
+        <button class="btn btn-ghost" id="loadShotsBtn">Show screenshots</button>
+      </div>
+    </div>
+    <p class="lede" id="shotsNote">Pick an employee to see their screenshots for the date chosen above. Click a picture to open it full size in Google Drive.</p>
+    <div class="shots" id="shotsGrid"></div>
+    <button class="btn btn-ghost" id="moreShotsBtn" hidden>Show older screenshots</button>
+  </section>
+
+</main>
+
+<footer>
+  <button class="linkbtn" id="footerLink">Admin dashboard</button>
+</footer>
+
+<video id="capVideo" muted playsinline style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;bottom:0"></video>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var app = null;            // team name, employees, statuses
+  var me = { name: '', pin: '' };
+  var state = null;          // current employee state from the server
+  var clockOffset = 0;       // server time minus this device's time
+  var adminPw = '';
+  var adminBusy = false;
+  var adminTimer = null;
+  var confirmTimer = null;
+  var toastTimer = null;
+  var pending = 0;
+
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- talking to Code.gs ---------- */
+  var useGas = (typeof google !== 'undefined' && google.script && google.script.run);
+
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    setLoading(1);
+    if (!useGas) {
+      return fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: fn, args: args })
+      }).then(function (r) { return r.text(); }).then(function (text) {
+        var j;
+        try { j = JSON.parse(text); } catch (e) {
+          throw new Error('The tracker could not reach its Google Sheet. The admin should check the Web app URL and that access is set to "Anyone".');
+        }
+        if (!j.ok) throw new Error(j.error || 'Something went wrong.');
+        return j.data;
+      }).then(function (data) { setLoading(-1); return data; }, function (err) {
+        setLoading(-1);
+        if (err && /Failed to fetch|NetworkError|Load failed/i.test(err.message || '')) {
+          err = new Error('No connection to the tracker. Check your internet and try again.');
+        }
+        throw err;
+      });
+    }
+    return new Promise(function (resolve, reject) {
+      var runner = google.script.run
+        .withSuccessHandler(function (res) { setLoading(-1); resolve(res); })
+        .withFailureHandler(function (err) { setLoading(-1); reject(err); });
+      runner[fn].apply(runner, args);
+    });
+  }
+
+  function setLoading(delta) {
+    pending = Math.max(0, pending + delta);
+    $('loadbar').className = pending > 0 ? 'loadbar on' : 'loadbar';
+  }
+
+  function errText(err) {
+    var m = (err && err.message) ? err.message : String(err || 'Something went wrong.');
+    return m.replace(/^(Error|Exception):\s*/i, '');
+  }
+
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = isError ? 'toast error' : 'toast';
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 6000 : 2800);
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+  function hoursText(h) {
+    var mins = Math.round((Number(h) || 0) * 60);
+    var hh = Math.floor(mins / 60), mm = mins % 60;
+    if (hh === 0) return mm + 'm';
+    return hh + 'h ' + pad(mm) + 'm';
+  }
+
+  function remember(key, value) {
+    try {
+      if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+    } catch (e) { /* storage blocked: fine, just don't remember */ }
+  }
+  function recall(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  /* ---------- views ---------- */
+  var VIEWS = ['setup', 'pick', 'employee', 'adminLogin', 'admin'];
+  function show(view) {
+    VIEWS.forEach(function (v) { $('view-' + v).hidden = (v !== view); });
+    var isAdminSide = (view === 'admin' || view === 'adminLogin');
+    $('footerLink').textContent = isAdminSide ? 'Back to employee time clock' : 'Admin dashboard';
+    $('footerLink').setAttribute('data-target', isAdminSide ? 'employee' : 'admin');
+    if (view !== 'admin') stopAdminRefresh();
+    $('toast').hidden = true;
+  }
+
+  /* ---------- top bar clock + running timer ---------- */
+  function tick() {
+    var now = new Date();
+    $('nowClock').textContent = now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) +
+      '  ' + now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    if (state && state.clockedIn) {
+      var serverNow = Date.now() + clockOffset;
+      var secs = Math.max(0, Math.floor((serverNow - state.clockInMs) / 1000));
+      $('timer').textContent = pad(Math.floor(secs / 3600)) + ':' + pad(Math.floor(secs / 60) % 60) + ':' + pad(secs % 60);
+
+      var sub = 'Clocked in at ' + state.clockInLabel;
+      if (state.status === 'On Break' && state.breakStartMs) {
+        var bm = Math.max(0, Math.floor((serverNow - state.breakStartMs) / 60000));
+        sub += '. On break for ' + bm + ' min';
+      } else if (state.breakMin > 0) {
+        sub += '. Breaks so far: ' + state.breakMin + ' min';
+      }
+      $('punchSub').textContent = sub;
+      trackingTick();
+    }
+  }
+
+  /* ---------- screen tracking: screenshots, activity detection, heartbeat ---------- */
+  var cap = { stream: null, track: null, idleAbort: null, nextShotAt: 0, lastShot: '', lastSig: null,
+              busy: false, lastContact: 0, autoing: false, starting: false };
+
+  function captureLive() { return !!(cap.track && cap.track.readyState === 'live'); }
+
+  function idlePermission() {
+    if (!navigator.permissions || !navigator.permissions.query) return Promise.resolve('prompt');
+    return navigator.permissions.query({ name: 'idle-detection' })
+      .then(function (p) { return p.state; })
+      .catch(function () { return 'prompt'; });
+  }
+
+  /** Resolves true when screen sharing + activity detection are running,
+      false when the person must press the button once more (after allowing a permission). */
+  function beginTracking() {
+    if (useGas) {
+      return Promise.reject(new Error('Screen sharing does not work from this link. Use the tracker link your admin sent you.'));
+    }
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) || !('IdleDetector' in window)) {
+      return Promise.reject(new Error('Open this page in Google Chrome or Microsoft Edge on a computer. Phones and other browsers cannot share the screen.'));
+    }
+    if (captureLive()) return Promise.resolve(true);
+
+    return idlePermission().then(function (st) {
+      if (st === 'granted') return 'granted';
+      return IdleDetector.requestPermission().then(function (res) { return res === 'granted' ? 'just-granted' : 'denied'; });
+    }).then(function (st) {
+      if (st === 'denied') {
+        throw new Error('Activity detection is blocked. Click the icon left of the address bar, allow "Your device use", then try again.');
+      }
+      if (st === 'just-granted') {
+        toast('Allowed. Now press the button once more to share your screen.');
+        return false;
+      }
+      return navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'monitor', frameRate: { ideal: 2 } },
+        audio: false,
+        monitorTypeSurfaces: 'include',
+        selfBrowserSurface: 'exclude'
+      }).then(function (stream) {
+        var track = stream.getVideoTracks()[0];
+        var surface = track.getSettings ? track.getSettings().displaySurface : '';
+        if (surface && surface !== 'monitor') {
+          track.stop();
+          throw new Error('You shared a window or a tab. Press the button again and choose "Entire screen".');
+        }
+        cap.stream = stream;
+        cap.track = track;
+        track.addEventListener('ended', function () {
+          if (cap.track !== track) return;
+          cap.track = null; cap.stream = null;
+          if (state && state.clockedIn) autoOut('Screen sharing stopped', 0);
+        });
+        var v = $('capVideo');
+        v.srcObject = stream;
+        var pl = v.play(); if (pl && pl.catch) pl.catch(function () {});
+        return startIdle().then(function () {
+          cap.nextShotAt = Date.now() + 20000;
+          cap.lastSig = null;
+          cap.lastContact = Date.now();
+          return true;
+        }, function (err) { stopCapture(); throw err; });
+      }, function (err) {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+          throw new Error('Screen sharing was cancelled. Choose "Entire screen" and press Share.');
+        }
+        throw err;
+      });
+    });
+  }
+
+  function startIdle() {
+    stopIdle();
+    cap.idleAbort = new AbortController();
+    var d = new IdleDetector();
+    d.addEventListener('change', function () {
+      if (!state || !state.clockedIn || state.status === 'On Break') return;
+      if (d.screenState === 'locked') { autoOut('Screen locked', 0); return; }
+      if (d.userState === 'idle') {
+        autoOut('No mouse or keyboard activity for ' + app.idleMinutes + ' min', app.idleMinutes);
+      }
+    });
+    return d.start({ threshold: Math.max(60000, app.idleMinutes * 60000), signal: cap.idleAbort.signal })
+      .catch(function () { throw new Error('Activity detection could not start. Allow "Your device use" for this site and try again.'); });
+  }
+
+  function stopIdle() {
+    if (cap.idleAbort) { try { cap.idleAbort.abort(); } catch (e) {} cap.idleAbort = null; }
+  }
+
+  function stopCapture() {
+    stopIdle();
+    var t = cap.track;
+    cap.track = null; cap.stream = null;
+    if (t) { try { t.stop(); } catch (e) {} }
+    try { $('capVideo').srcObject = null; } catch (e) {}
+  }
+
+  function autoOut(reason, backdateMin) {
+    if (cap.autoing || !state || !state.clockedIn) return;
+    cap.autoing = true;
+    var task = $('taskInput').value;
+    stopCapture();
+    call('clockOut', me.name, me.pin, task, reason, backdateMin).then(function (s) {
+      renderState(s, true);
+      showAutoNote('You were clocked out automatically: ' + reason + '.');
+    }).catch(function () {
+      showAutoNote('Tracking stopped: ' + reason + '. You will be clocked out automatically in a few minutes.');
+      refreshEmployee();
+    }).then(function () { cap.autoing = false; });
+  }
+
+  function showAutoNote(text) { $('autoNote').textContent = text; $('autoNote').hidden = false; }
+  function hideAutoNote() { $('autoNote').hidden = true; }
+
+  /** Server replied: if it says we are no longer clocked in, the server closed the session. */
+  function serverSaid(s) {
+    cap.lastContact = Date.now();
+    var wasIn = state && state.clockedIn;
+    renderState(s, false);
+    if (wasIn && !s.clockedIn) {
+      showAutoNote('You were clocked out automatically because the tracker lost contact (computer asleep, offline, or tab closed).');
+    }
+  }
+
+  function grabFrame() {
+    if (window.ImageCapture && cap.track) {
+      try {
+        var grab = new ImageCapture(cap.track).grabFrame().then(function (bmp) {
+          return { src: bmp, w: bmp.width, h: bmp.height };
+        });
+        // grabFrame can wait forever if the screen is not producing new frames: give it 4 seconds
+        var giveUp = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 4000); });
+        return Promise.race([grab, giveUp]).then(function (f) { return f || videoFrame(); }, videoFrame);
+      } catch (e) { /* fall through */ }
+    }
+    return Promise.resolve(videoFrame());
+  }
+  function videoFrame() {
+    var v = $('capVideo');
+    return v.videoWidth ? { src: v, w: v.videoWidth, h: v.videoHeight } : null;
+  }
+
+  function drawScaled(frame, maxW, quality) {
+    var scale = Math.min(1, maxW / frame.w);
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(frame.w * scale));
+    c.height = Math.max(1, Math.round(frame.h * scale));
+    c.getContext('2d').drawImage(frame.src, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality).split(',')[1] || '';
+  }
+
+  function signature(frame) {
+    var c = document.createElement('canvas');
+    c.width = 32; c.height = 18;
+    var ctx = c.getContext('2d');
+    ctx.drawImage(frame.src, 0, 0, 32, 18);
+    var px = ctx.getImageData(0, 0, 32, 18).data, out = [];
+    for (var i = 0; i < px.length; i += 4) out.push((px[i] + px[i + 1] + px[i + 2]) / 3);
+    return out;
+  }
+
+  function sameScreen(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    var sum = 0;
+    for (var i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+    return (sum / a.length) < 1.2;
+  }
+
+  function takeShot() {
+    if (cap.busy || !captureLive()) return;
+    cap.busy = true;
+    grabFrame().then(function (frame) {
+      if (!frame || !frame.w) return null;
+      var sig = signature(frame);
+      var note = sameScreen(sig, cap.lastSig) ? 'No screen change' : '';
+      cap.lastSig = sig;
+      return call('saveShot', me.name, me.pin, drawScaled(frame, 1280, 0.5), drawScaled(frame, 320, 0.55), note);
+    }).then(function (s) {
+      if (s) {
+        cap.lastShot = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        serverSaid(s);
+      }
+    }).catch(function () { /* try again at the next slot */ }).then(function () {
+      cap.busy = false;
+      cap.nextShotAt = Date.now() + app.shotMinutes * 60000 * (0.7 + Math.random() * 0.6);
+    });
+  }
+
+  function trackingTick() {
+    if (!app || !app.requireScreen || !state || !state.clockedIn) return;
+    var live = captureLive();
+    var strip = $('trackStrip');
+    strip.hidden = false;
+    $('resumeBtn').hidden = live;
+    if (!live) {
+      strip.setAttribute('data-on', 'false');
+      $('trackText').textContent = 'Screen sharing is off. Share your screen again within a few minutes or you will be clocked out.';
+      return;
+    }
+    if (state.status === 'On Break') {
+      strip.setAttribute('data-on', 'paused');
+      $('trackText').textContent = 'On break: screenshots are paused.';
+    } else {
+      strip.setAttribute('data-on', 'true');
+      $('trackText').textContent = 'Screen tracking is on.' + (cap.lastShot ? ' Last screenshot ' + cap.lastShot + '.' : '');
+      if (Date.now() >= cap.nextShotAt) takeShot();
+    }
+    if (Date.now() - cap.lastContact > 120000 && !cap.busy) {
+      cap.lastContact = Date.now();
+      call('heartbeat', me.name, me.pin).then(serverSaid).catch(function () {});
+    }
+  }
+
+  function resumeSharing() {
+    $('resumeBtn').disabled = true;
+    beginTracking().then(function (ready) {
+      if (!ready) return;
+      hideAutoNote();
+      return call('heartbeat', me.name, me.pin).then(serverSaid);
+    }).catch(function (err) { toast(errText(err), true); })
+      .then(function () { $('resumeBtn').disabled = false; });
+  }
+
+  /* ---------- employee screen ---------- */
+  function fillEmployeeSelect() {
+    var sel = $('empSelect');
+    sel.innerHTML = '<option value="">Choose your name</option>';
+    app.employees.forEach(function (e) {
+      var o = document.createElement('option');
+      o.value = e.name;
+      o.textContent = e.name;
+      sel.appendChild(o);
+    });
+    var none = app.employees.length === 0;
+    $('noEmployees').hidden = !none;
+    $('pickForm').hidden = none;
+  }
+
+  function selectedEmployee() {
+    if (!app) return null;
+    var name = $("empSelect").value;
+    for (var i = 0; i < app.employees.length; i++) {
+      if (app.employees[i].name === name) return app.employees[i];
+    }
+    return null;
+  }
+
+  function onSelectChange() {
+    var emp = selectedEmployee();
+    $('pinField').hidden = !(emp && emp.hasPin);
+    $('pinInput').value = '';
+  }
+
+  function openTimeClock() {
+    var emp = selectedEmployee();
+    if (!emp) { toast('Choose your name first.', true); return; }
+    var pin = $('pinInput').value.trim();
+    if (emp.hasPin && !pin) { toast('Enter your PIN.', true); $('pinInput').focus(); return; }
+
+    $('continueBtn').disabled = true;
+    call('getEmployeeState', emp.name, pin).then(function (s) {
+      me = { name: emp.name, pin: pin };
+      remember('tt_name', emp.name);
+      $('whoName').textContent = emp.name;
+      renderState(s, true);
+      show('employee');
+    }).catch(function (err) {
+      toast(errText(err), true);
+    }).then(function () { $('continueBtn').disabled = false; });
+  }
+
+  function buildStatusButtons() {
+    var seg = $('statusSeg');
+    seg.innerHTML = '';
+    app.statuses.forEach(function (st) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = st;
+      b.setAttribute('data-status', st);
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { saveUpdate(st, 'Status saved: ' + st); });
+      seg.appendChild(b);
+    });
+  }
+
+  function renderState(s, resetInputs) {
+    state = s;
+    clockOffset = s.serverNowMs - Date.now();
+    resetClockOutConfirm();
+
+    $('punch').setAttribute('data-state', s.status);
+    $('statusBadge').setAttribute('data-state', s.status);
+    $('statusBadge').textContent = s.clockedIn ? s.status : 'Clocked out';
+    $('outForm').hidden = s.clockedIn;
+    $('inForm').hidden = !s.clockedIn;
+
+    if (s.clockedIn) {
+      var buttons = $('statusSeg').querySelectorAll('button');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].setAttribute('aria-pressed', buttons[i].getAttribute('data-status') === s.status ? 'true' : 'false');
+      }
+      if (resetInputs || document.activeElement !== $('taskInput')) $('taskInput').value = s.task;
+    } else {
+      if (!cap.starting) stopCapture();
+      $('trackStrip').hidden = true;
+      $('timer').textContent = '00:00:00';
+      $('punchSub').textContent = s.doneTodayHours > 0
+        ? 'Worked today: ' + hoursText(s.doneTodayHours)
+        : 'You have not clocked in today.';
+      if (resetInputs) $('startTask').value = '';
+    }
+    tick();
+  }
+
+  function setEmployeeButtons(disabled) {
+    var ids = ['clockInBtn', 'saveTaskBtn', 'clockOutBtn'];
+    ids.forEach(function (id) { $(id).disabled = disabled; });
+    var buttons = $('statusSeg').querySelectorAll('button');
+    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = disabled;
+  }
+
+  function employeeAction(promise, okMessage) {
+    setEmployeeButtons(true);
+    promise.then(function (s) {
+      cap.lastContact = Date.now();
+      renderState(s, true);
+      toast(okMessage);
+    }).catch(function (err) {
+      toast(errText(err), true);
+      refreshEmployee();
+    }).then(function () { setEmployeeButtons(false); });
+  }
+
+  function doClockIn() {
+    if (!app.requireScreen) {
+      employeeAction(call('clockIn', me.name, me.pin, $('startTask').value, ''), 'Clocked in');
+      return;
+    }
+    setEmployeeButtons(true);
+    cap.starting = true;
+    beginTracking().then(function (ready) {
+      if (!ready) return;
+      return call('clockIn', me.name, me.pin, $('startTask').value, 'screen').then(function (s) {
+        hideAutoNote();
+        cap.lastContact = Date.now();
+        renderState(s, true);
+        toast('Clocked in');
+      }, function (err) { stopCapture(); throw err; });
+    }).catch(function (err) {
+      toast(errText(err), true);
+    }).then(function () { cap.starting = false; setEmployeeButtons(false); });
+  }
+
+  function saveUpdate(status, okMessage) {
+    employeeAction(call('updateStatus', me.name, me.pin, status, $('taskInput').value), okMessage);
+  }
+
+  function doClockOut() {
+    var btn = $('clockOutBtn');
+    if (btn.className.indexOf('confirm') === -1) {
+      btn.className += ' confirm';
+      btn.textContent = 'Tap again to clock out';
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(resetClockOutConfirm, 4000);
+      return;
+    }
+    employeeAction(call('clockOut', me.name, me.pin, $('taskInput').value), 'Clocked out');
+  }
+
+  function resetClockOutConfirm() {
+    clearTimeout(confirmTimer);
+    var btn = $('clockOutBtn');
+    btn.className = 'btn btn-out btn-big btn-block';
+    btn.textContent = 'Clock out';
+  }
+
+  function refreshEmployee() {
+    if (!me.name || $('view-employee').hidden) return;
+    call('getEmployeeState', me.name, me.pin).then(serverSaid).catch(function () {});
+  }
+
+  function switchUser() {
+    if (state && state.clockedIn && captureLive()) {
+      toast('Clock out first, then switch name.', true);
+      return;
+    }
+    hideAutoNote();
+    me = { name: '', pin: '' };
+    state = null;
+    remember('tt_name', null);
+    $('empSelect').value = '';
+    onSelectChange();
+    show('pick');
+  }
+
+  /* ---------- admin dashboard ---------- */
+  function adminLogin() {
+    var pw = $('adminPw').value;
+    if (!pw) { toast('Enter the admin password.', true); return; }
+    $('adminLoginBtn').disabled = true;
+    call('verifyAdmin', pw).then(function () {
+      adminPw = pw;
+      $('adminPw').value = '';
+      $('logDate').value = app.today;
+      $('logDate').max = app.today;
+      show('admin');
+      loadAdmin();
+      startAdminRefresh();
+    }).catch(function (err) {
+      toast(errText(err), true);
+    }).then(function () { $('adminLoginBtn').disabled = false; });
+  }
+
+  function adminLogout() {
+    adminPw = '';
+    stopAdminRefresh();
+    goEmployeeSide();
+  }
+
+  function startAdminRefresh() {
+    stopAdminRefresh();
+    adminTimer = setInterval(function () {
+      if (!document.hidden) loadAdmin();
+    }, 30000);
+  }
+  function stopAdminRefresh() {
+    if (adminTimer) { clearInterval(adminTimer); adminTimer = null; }
+  }
+
+  function loadAdmin() {
+    if (adminBusy || !adminPw) return;
+    adminBusy = true;
+    call('getAdminData', adminPw, $('logDate').value).then(function (d) {
+      renderAdmin(d);
+    }).catch(function (err) {
+      toast(errText(err), true);
+    }).then(function () { adminBusy = false; });
+  }
+
+  function renderAdmin(d) {
+    $('teamName').textContent = d.teamName;
+    $('refreshNote').textContent = 'Updated ' + d.refreshedAt + '. Refreshes every 30 seconds.';
+    if (d.today !== app.today) { app.today = d.today; $('logDate').max = d.today; }
+
+    var sel = $('shotEmp');
+    if (sel.options.length !== d.employees.length + 1) {
+      var keep = sel.value;
+      sel.innerHTML = '<option value="">Choose employee</option>';
+      d.employees.forEach(function (n) {
+        var o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+      sel.value = keep;
+    }
+
+    var groups = [
+      { key: 'in', title: 'Clocked in', empty: 'Nobody is working right now.' },
+      { key: 'break', title: 'On break', empty: 'Nobody is on break.' },
+      { key: 'out', title: 'Clocked out', empty: 'Everyone is clocked in.' }
+    ];
+    var html = '';
+    groups.forEach(function (g) {
+      var people = d.team.filter(function (p) { return p.group === g.key; });
+      html += '<div class="col" data-group="' + g.key + '">' +
+        '<div class="col-head"><h2>' + g.title + '</h2><span class="col-count">' + people.length + '</span></div>';
+      if (!people.length) html += '<p class="col-empty">' + g.empty + '</p>';
+      people.forEach(function (p) {
+        var meta;
+        if (g.key === 'out') {
+          meta = p.since ? 'Clocked out ' + esc(p.since) : 'Not clocked in today';
+        } else {
+          meta = 'In since ' + esc(p.since) +
+            (d.requireScreen && p.lastSeen ? ', tracker last seen ' + esc(p.lastSeen)
+              : (p.lastUpdate ? ', last update ' + esc(p.lastUpdate) : ''));
+        }
+        var badge = (g.key === 'in' && p.status === 'Completed')
+          ? '<span class="badge" data-state="Completed">Task completed</span>' : '';
+        html += '<div class="tag">' +
+          '<div class="tag-top"><span class="tag-name">' + esc(p.name) + badge + '</span>' +
+          '<span class="tag-hours">' + (p.hoursToday > 0 ? hoursText(p.hoursToday) + ' today' : '') + '</span></div>' +
+          (p.task ? '<p class="tag-task">' + esc(p.task) + '</p>'
+                  : (g.key === 'out' ? '' : '<p class="tag-task none">No task entered</p>')) +
+          '<p class="tag-meta">' + meta + '</p>' +
+          '</div>';
+      });
+      html += '</div>';
+    });
+    $('board').innerHTML = html;
+
+    var rows = '';
+    if (!d.log.length) {
+      rows = '<tr><td colspan="9" class="empty-row">No one clocked in on this date.</td></tr>';
+    }
+    d.log.forEach(function (r) {
+      rows += '<tr>' +
+        '<td class="nowrap"><strong>' + esc(r.name) + '</strong></td>' +
+        '<td class="nowrap">' + esc(r.clockIn) + '</td>' +
+        '<td class="nowrap">' + (r.open ? 'Still clocked in' : esc(r.clockOut)) + '</td>' +
+        '<td class="num">' + hoursText(r.total) + '</td>' +
+        '<td class="num">' + r.breakMin + 'm</td>' +
+        '<td class="num">' + hoursText(r.net) + '</td>' +
+        '<td class="nowrap"><span class="badge" data-state="' + esc(r.status) + '">' + esc(r.status) + '</span></td>' +
+        '<td class="task">' + esc(r.task) + '</td>' +
+        '<td class="updates">' + esc(r.updates) + '</td>' +
+        '</tr>';
+    });
+    $('logBody').innerHTML = rows;
+    $('logFoot').innerHTML = d.log.length
+      ? '<tr><td colspan="5">Team total worked</td><td class="num">' + hoursText(d.dayTotal) + '</td><td colspan="3"></td></tr>'
+      : '';
+  }
+
+  var shotsShown = 0;
+  function loadShots(reset) {
+    var name = $('shotEmp').value;
+    if (!name) { toast('Choose an employee first.', true); return; }
+    if (reset) { shotsShown = 0; $('shotsGrid').innerHTML = ''; }
+    $('loadShotsBtn').disabled = true; $('moreShotsBtn').disabled = true;
+    call('getShots', adminPw, $('logDate').value, name, shotsShown).then(function (res) {
+      var html = '';
+      res.items.forEach(function (it) {
+        var url = /^https:\/\//.test(it.url) ? it.url : '#';
+        html += '<a class="shot" target="_blank" rel="noopener" href="' + esc(url) + '">' +
+          (it.thumb ? '<img alt="Screenshot at ' + esc(it.time) + '" src="data:image/jpeg;base64,' + esc(it.thumb) + '">' : '<img alt="">') +
+          '<span class="shot-cap"><span>' + esc(it.time) + '</span>' +
+          (it.note ? '<span class="shot-flag">' + esc(it.note) + '</span>' : '') + '</span></a>';
+      });
+      $('shotsGrid').insertAdjacentHTML('beforeend', html);
+      shotsShown += res.items.length;
+      $('shotsNote').textContent = res.total
+        ? 'Showing ' + shotsShown + ' of ' + res.total + ' screenshots for ' + name + ', newest first. Click a picture to open it full size in Google Drive.'
+        : 'No screenshots for ' + name + ' on this date.';
+      $('moreShotsBtn').hidden = shotsShown >= res.total;
+    }).catch(function (err) { toast(errText(err), true); })
+      .then(function () { $('loadShotsBtn').disabled = false; $('moreShotsBtn').disabled = false; });
+  }
+
+  /* ---------- switching between the two sides ---------- */
+  function goEmployeeSide() {
+    if (me.name && state) { show('employee'); refreshEmployee(); }
+    else show('pick');
+  }
+
+  function goAdminSide() {
+    if (adminPw) { show('admin'); loadAdmin(); startAdminRefresh(); }
+    else { show('adminLogin'); $('adminPw').focus(); }
+  }
+
+  /* ---------- start ---------- */
+  function wire() {
+    $('empSelect').addEventListener('change', onSelectChange);
+    $('continueBtn').addEventListener('click', openTimeClock);
+    $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') openTimeClock(); });
+    $('switchBtn').addEventListener('click', switchUser);
+    $('clockInBtn').addEventListener('click', doClockIn);
+    $('startTask').addEventListener('keydown', function (e) { if (e.key === 'Enter') doClockIn(); });
+    $('saveTaskBtn').addEventListener('click', function () { saveUpdate(state.status, 'Task saved'); });
+    $('taskInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') saveUpdate(state.status, 'Task saved'); });
+    $('clockOutBtn').addEventListener('click', doClockOut);
+    $('resumeBtn').addEventListener('click', resumeSharing);
+    $('loadShotsBtn').addEventListener('click', function () { loadShots(true); });
+    $('moreShotsBtn').addEventListener('click', function () { loadShots(false); });
+    $('shotEmp').addEventListener('change', function () { if ($('shotEmp').value) loadShots(true); });
+    window.addEventListener('beforeunload', function (e) {
+      if (state && state.clockedIn && captureLive()) { e.preventDefault(); e.returnValue = ''; }
+    });
+    $('adminLoginBtn').addEventListener('click', adminLogin);
+    $('adminPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') adminLogin(); });
+    $('adminLogoutBtn').addEventListener('click', adminLogout);
+    $('refreshBtn').addEventListener('click', loadAdmin);
+    $('logDate').addEventListener('change', function () {
+      loadAdmin();
+      if ($('shotEmp').value) loadShots(true);
+    });
+    $('todayBtn').addEventListener('click', function () {
+      $('logDate').value = app.today; loadAdmin();
+      if ($('shotEmp').value) loadShots(true);
+    });
+    $('footerLink').addEventListener('click', function () {
+      if ($('footerLink').getAttribute('data-target') === 'employee') goEmployeeSide(); else goAdminSide();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) return;
+      if (!$('view-employee').hidden) refreshEmployee();
+      if (!$('view-admin').hidden) loadAdmin();
+    });
+  }
+
+  function start() {
+    wire();
+    tick();
+    setInterval(tick, 1000);
+
+    if (!useGas && !/^https:\/\/script\.google\.com\/.+\/exec/.test(String(API_URL).trim())) {
+      show('setup');
+      return;
+    }
+    API_URL = String(API_URL).trim();
+
+    call('getAppInfo').then(function (info) {
+      app = info;
+      $('teamName').textContent = info.teamName;
+      document.title = info.teamName + ' - Time Tracker';
+      fillEmployeeSelect();
+      buildStatusButtons();
+      if (info.requireScreen) {
+        $('screenInfo').hidden = false;
+        $('screenInfo').textContent = 'When you clock in, your browser asks you to share your entire screen. ' +
+          'While you are clocked in, a screenshot is saved about every ' + info.shotMinutes +
+          ' minutes (not during breaks). You are clocked out automatically if you stop sharing, lock the screen, ' +
+          'or do not touch the mouse or keyboard for ' + info.idleMinutes + ' minutes.';
+      }
+
+      var saved = recall('tt_name');
+      if (saved) { $('empSelect').value = saved; }
+      onSelectChange();
+
+      // A link ending in ?page=admin opens the admin sign-in directly
+      var opened = false;
+      function openDefault(page) {
+        if (opened) return;
+        opened = true;
+        if (page === 'admin') { goAdminSide(); return; }
+        var emp = selectedEmployee();
+        show('pick');
+        if (emp && !emp.hasPin) openTimeClock();
+      }
+      try {
+        if (useGas) {
+          google.script.url.getLocation(function (loc) {
+            openDefault(loc && loc.parameter ? loc.parameter.page : '');
+          });
+          setTimeout(function () { openDefault(''); }, 1500);
+        } else {
+          openDefault(new URLSearchParams(window.location.search).get('page') || '');
+        }
+      } catch (e) {
+        openDefault('');
+      }
+    }).catch(function (err) {
+      show('pick');
+      toast('Could not load the tracker: ' + errText(err), true);
+    });
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
